@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>متجر بسيط مع سلة وخرائط</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    body {
+      font-family: "Tahoma", sans-serif;
+      margin: 0;
+      background: #f7f7f7;
+    }
+
+    header {
+      background: #3004f3;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      position: relative;
+    }
+
+    /* السلة بالوسط */
+    #cart-icon {
+      font-size: 28px;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+
+    #cart-icon:hover {
+      transform: scale(1.2);
+      transition: transform 0.2s;
+    }
+
+    /* المنتجات */
+    .product-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      padding: 20px;
+    }
+
+    .product {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      padding: 10px;
+    }
+
+    .product img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      border-radius: 10px;
+    }
+
+    .product button {
+      background: #4CAF50;
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    /* السلة المنبثقة */
+    #cart {
+      position: fixed;
+      top: 70px;
+      right: 50%;
+      transform: translateX(50%) scale(0);
+      width: 90%;
+      max-width: 350px;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      padding: 15px;
+      transition: transform 0.3s;
+      z-index: 10;
+    }
+
+    #cart.active {
+      transform: translateX(50%) scale(1);
+    }
+
+    #cart h3 {
+      text-align: center;
+      margin-top: 0;
+    }
+
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+    }
+
+    /* الخريطة */
+    #map {
+      height: 250px;
+      margin: 20px;
+      border-radius: 10px;
+      display: none;
+    }
+
+    button#get-location {
+      display: block;
+      margin: 0 auto 10px;
+      background: #2196f3;
+      border: none;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <button id="cart-icon">🛒</button>
+  </header>
+
+  <div class="product-container" id="products"></div>
+
+  <div id="cart">
+    <h3>السله</h3>
+    <div id="cart-items"></div>
+    <p><strong>الإجمالي:</strong> <span id="total">0</span> ر.س</p>
+    <button id="get-location"> <h3>تحديد موقعي</h3></button>
+    <p id="location"></p>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // ==================== بيانات المنتجات (لا تغيير) ====================
+    const products = [
+      { id: 2, name: "Boot Nike", price: 70, img: "z/2.jpg" },
+  { id: 3, name: "Boot Adidas", price: 70, img: "z/3.jpeg" },
+  { id: 4, name: "Boot Nike", price: 70, img: "z/4.jpg" },
+  { id: 5, name: "Boot Adidas", price: 70, img: "z/5.jpg" },
+  { id: 6, name: "Boot Nike", price: 70, img: "z/6.jpeg" },
+  { id: 7, name: "Boot Adidas", price: 70, img: "z/7.jpeg" },
+  { id: 8, name: "Boot Nike", price: 70, img: "z/8.jpeg" },
+  { id: 9, name: "Boot Puma", price: 70, img: "z/9.jpeg" },
+  { id: 10, name: "Boot Adidas", price: 70, img: "z/10.jpeg" },
+  { id: 11, name: "Boot Puma", price: 70, img: "z/11.jpg" },
+  { id: 12, name: "Boot Nike", price: 70, img: "z/12.jpg" },
+  { id: 13, name: "Boot Puma", price: 70, img: "z/13.jpg" },
+  { id: 14, name: "Boot Nike", price: 70, img: "z/14.jpg" },
+  { id: 15, name: "Boot Puma", price: 70, img: "z/15.jpg" },
+  { id: 16, name: "Boot Nike", price: 70, img: "z/16.jpg" },
+  { id: 17, name: "Boot Adidas", price: 70, img: "z/17.jpg" },
+  { id: 18, name: "Boot Puma", price: 70, img: "z/18.jpeg" },
+  { id: 19, name: "Boot Adidas", price: 70, img: "z/19.jpg" },
+  { id: 20, name: "Boot Chelsea", price: 70, img: "z/20.jpg" },
+  { id: 21, name: "Boot Puma", price: 70, img: "z/21.jpeg" },
+
+];
+
+    const productsDiv = document.getElementById("products");
+
+    products.forEach((p) => {
+      const div = document.createElement("div");
+      div.classList.add("product");
+      div.innerHTML = `
+        <img src="${p.img}" alt="${p.name}">
+        <h4>${p.name}</h4>
+        <p>${p.price} ر.س</p>
+        <button onclick="addToCart(${p.id})">إضافة للسلة</button>
+      `;
+      productsDiv.appendChild(div);
+    });
+
+    // ==================== نظام السلة (تم التعديل) ====================
+    let cart = [];
+
+    function addToCart(id) {
+      const item = products.find((p) => p.id === id);
+      const existing = cart.find((c) => c.id === id);
+      if (existing) {
+        existing.qty++;
+      } else {
+        cart.push({ ...item, qty: 1 });
+      }
+      saveCartToSessionStorage(); // ⬅️ تم تغيير الاستدعاء
+      renderCart();
+    }
+
+    function renderCart() {
+      const container = document.getElementById("cart-items");
+      container.innerHTML = "";
+      let total = 0;
+      cart.forEach((item) => {
+        total += item.price * item.qty;
+        const div = document.createElement("div");
+        div.classList.add("cart-item");
+        div.innerHTML = `
+          <span>${item.name} (×${item.qty})</span>
+          <span>${item.price * item.qty} ر.س</span>
+        `;
+        container.appendChild(div);
+      });
+      document.getElementById("total").textContent = total;
+    }
+
+    // ==================== التخزين المؤقت (SessionStorage) لحذف السلة عند الإغلاق ====================
+
+    // **التعديل هنا:** دالة لحفظ السلة في SessionStorage
+    function saveCartToSessionStorage() {
+      // نستخدم sessionStorage بدلاً من localStorage
+      sessionStorage.setItem("shoppingCart", JSON.stringify(cart));
+    }
+
+    // **التعديل هنا:** دالة لاسترجاع السلة من SessionStorage
+    function getCartFromSessionStorage() {
+      const storedCart = sessionStorage.getItem("shoppingCart");
+      if (storedCart) {
+        // القراءة من sessionStorage
+        cart = JSON.parse(storedCart);
+      }
+      renderCart();
+    }
+
+    // استدعاء الدالة عند تحميل الصفحة
+    getCartFromSessionStorage(); // ⬅️ تم تغيير الاستدعاء
+
+    // ==================== فتح/إغلاق السلة (لا تغيير) ====================
+    const cartIcon = document.getElementById("cart-icon");
+    const cartPopup = document.getElementById("cart");
+    cartIcon.addEventListener("click", () => {
+      cartPopup.classList.toggle("active");
+    });
+
+    // ==================== GPS + خريطة (لا تغيير) ====================
+    const locationText = document.getElementById("location");
+    const getLocationBtn = document.getElementById("get-location");
+    const mapDiv = document.getElementById("map");
+    let map;
+
+    getLocationBtn.addEventListener("click", () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(showMapPosition, showMapError);
+      } else {
+        locationText.textContent = "GPS غير مدعوم في هذا المتصفح.";
+      }
+    });
+
+    function showMapPosition(position) {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+
+      locationText.innerHTML = `خط العرض: ${lat.toFixed(5)}<br>خط الطول: ${lon.toFixed(5)}`;
+      mapDiv.style.display = "block";
+
+      if (!map) {
+        map = L.map("map").setView([lat, lon], 13);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap",
+        }).addTo(map);
+        L.marker([lat, lon]).addTo(map).bindPopup("موقعك الحالي 📍").openPopup();
+      } else {
+        map.setView([lat, lon], 13);
+        // إزالة أي علامات سابقة وإضافة علامة جديدة إذا كنت تريد علامة واحدة فقط
+        map.eachLayer(layer => {
+          if (layer instanceof L.Marker) {
+            map.removeLayer(layer);
+          }
+        });
+        L.marker([lat, lon]).addTo(map).bindPopup("موقعك الحالي 📍").openPopup();
+      }
+    }
+
+    function showMapError(error) {
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          locationText.textContent = "يرجى السماح بالوصول إلى الموقع.";
+          break;
+        case error.POSITION_UNAVAILABLE:
+          locationText.textContent = "الموقع غير متاح.";
+          break;
+        case error.TIMEOUT:
+          locationText.textContent = "انتهت مهلة طلب الموقع.";
+          break;
+        default:
+          locationText.textContent = "حدث خطأ غير معروف.";
+      }
+    }
+  </script>
+</body>
+</html>
